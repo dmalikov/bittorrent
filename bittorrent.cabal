@@ -153,7 +153,8 @@ library
                      , time         >= 1.0
 
                        -- Network
-                     , network      >= 2.4
+                     , network      >= 2.6.0.2
+                     , network-uri  >= 2.6.0.1
                      , krpc         >= 0.6.1
                      , http-types   >= 0.8
                      , http-client  >= 0.2
@@ -236,7 +237,7 @@ test-suite spec
                        -- * Network
                      , http-types
                      , iproute
-                     , network
+                     , network >= 2.6.0.2
 
                        -- * System
                      , optparse-applicative >= 0.8
@@ -293,7 +294,7 @@ executable mktorrent
                      , lifted-async
                      , parallel-io
 
-                     , network
+                     , network-uri >= 2.6.0.1
                      , bittorrent
 
                      , filepath
