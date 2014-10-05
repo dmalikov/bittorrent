@@ -95,7 +95,8 @@ import Network.KRPC
 import Data.Torrent
 import Network.BitTorrent.Address
 import Network.BitTorrent.DHT.Token
-import Network.KRPC ()
+
+{-# ANN module ("HLint: ignore Use camelCase" :: String) #-}
 
 {-----------------------------------------------------------------------
 -- envelopes
@@ -120,7 +121,7 @@ instance BEncode a => BEncode (Query a) where
       dict (BDict d) = d
       dict    _      = error "impossible: instance BEncode (Query a)"
 
-  fromBEncode v = do
+  fromBEncode v =
     Query <$> fromDict (field (req node_id_key)) v
           <*> fromBEncode v
 
@@ -303,7 +304,7 @@ instance BEncode Announce where
     where
       flagField flag = if flag then Just (1 :: Int) else Nothing
 
-  fromBEncode = fromDict $ do
+  fromBEncode = fromDict $
     Announce <$> (boolField <$> optional (field (req implied_port_key)))
              <*>! info_hash_key
              <*>! port_key

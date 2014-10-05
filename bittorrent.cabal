@@ -98,7 +98,7 @@ library
                      , bits-extras  >= 0.1.2
                      , convertible  >= 1.0
                      , pretty       >= 1.1
-                     , pretty-class >= 0.1
+                     , prettyclass  >= 1.0.0.0
 
                        -- Control
                      , deepseq      >= 1.3
@@ -285,7 +285,7 @@ executable mktorrent
   build-depends:       base == 4.*
                      , bytestring
                      , text
-                     , pretty-class
+                     , prettyclass >= 1.0.0.0
 
                      , mtl
                      , conduit
@@ -311,6 +311,6 @@ executable client
   build-depends:       base        == 4.*
                      , bittorrent
                      , mtl
-                     , pretty-class
+                     , prettyclass >= 1.0.0.0
                      , data-default
                      , optparse-applicative

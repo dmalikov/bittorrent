@@ -131,7 +131,7 @@ import Network
 import Network.Socket hiding (Connected)
 import Network.Socket.ByteString as BS
 import Text.PrettyPrint as PP hiding ((<>))
-import Text.PrettyPrint.Class
+import Text.PrettyPrint.HughesPJClass hiding ((<>))
 import Text.Show.Functions ()
 import System.Log.FastLogger (ToLogStr(..))
 import System.Timeout
@@ -161,7 +161,7 @@ instance Default ChannelSide where
   def = ThisPeer
 
 instance Pretty ChannelSide where
-  pretty = PP.text . show
+  pPrint = PP.text . show
 
 -- | A protocol errors occur when a peer violates protocol
 -- specification.
@@ -213,7 +213,7 @@ data ProtocolError
     deriving Show
 
 instance Pretty ProtocolError where
-  pretty = PP.text . show
+  pPrint = PP.text . show
 
 errorPenalty :: ProtocolError -> Int
 errorPenalty (InvalidProtocol      _) = 1
@@ -256,7 +256,7 @@ data WireFailure
 instance Exception WireFailure
 
 instance Pretty WireFailure where
-  pretty = PP.text . show
+  pPrint = PP.text . show
 
 -- TODO
 -- data Penalty = Ban | Penalty Int
@@ -288,9 +288,9 @@ data FlowStats = FlowStats
   } deriving Show
 
 instance Pretty FlowStats where
-  pretty FlowStats {..} =
+  pPrint FlowStats {..} =
     PP.int messageCount <+> "messages" $+$
-    pretty messageBytes
+    pPrint messageBytes
 
 -- | Zeroed stats.
 instance Default FlowStats where
@@ -328,10 +328,10 @@ data ConnectionStats = ConnectionStats
   } deriving Show
 
 instance Pretty ConnectionStats where
-  pretty ConnectionStats {..} = vcat
-    [ "Recv:" <+> pretty incomingFlow
-    , "Sent:" <+> pretty outcomingFlow
-    , "Both:" <+> pretty (incomingFlow <> outcomingFlow)
+  pPrint ConnectionStats {..} = vcat
+    [ "Recv:" <+> pPrint incomingFlow
+    , "Sent:" <+> pPrint outcomingFlow
+    , "Both:" <+> pPrint (incomingFlow <> outcomingFlow)
     ]
 
 -- | Zeroed stats.
@@ -348,8 +348,8 @@ instance Monoid ConnectionStats where
 
 -- | Aggregate one more message stats in the /specified/ direction.
 addStats :: ChannelSide -> ByteStats -> ConnectionStats -> ConnectionStats
-addStats ThisPeer   x s = s { outcomingFlow = (FlowStats 1 x) <> (outcomingFlow s) }
-addStats RemotePeer x s = s { incomingFlow  = (FlowStats 1 x) <> (incomingFlow  s) }
+addStats ThisPeer   x s = s { outcomingFlow = FlowStats 1 x <> outcomingFlow s }
+addStats RemotePeer x s = s { incomingFlow  = FlowStats 1 x <> incomingFlow  s }
 
 -- | Sum of overhead and control bytes in both directions.
 wastedBytes :: ConnectionStats -> Int
@@ -493,8 +493,8 @@ data PeerStatus = PeerStatus
 $(makeLenses ''PeerStatus)
 
 instance Pretty PeerStatus where
-  pretty PeerStatus {..} =
-    pretty (Choking _choking) <+> "and" <+> pretty (Interested _interested)
+  pPrint PeerStatus {..} =
+    pPrint (Choking _choking) <+> "and" <+> pPrint (Interested _interested)
 
 -- | Connections start out choked and not interested.
 instance Default PeerStatus where
@@ -515,7 +515,7 @@ updateStatus (Interested b) = interested .~ b
 
 -- | Can be used to generate outcoming messages.
 statusUpdates :: PeerStatus -> PeerStatus -> [StatusUpdate]
-statusUpdates a b = M.catMaybes $
+statusUpdates a b = M.catMaybes
   [ if _choking    a == _choking    b then Nothing
     else Just $ Choking    $ _choking    b
   , if _interested a == _interested b then Nothing
@@ -535,9 +535,9 @@ data ConnectionStatus = ConnectionStatus
 $(makeLenses ''ConnectionStatus)
 
 instance Pretty ConnectionStatus where
-  pretty ConnectionStatus {..} =
-    "this  " PP.<+> pretty _clientStatus PP.$$
-    "remote" PP.<+> pretty _remoteStatus
+  pPrint ConnectionStatus {..} =
+    "this  " PP.<+> pPrint _clientStatus PP.$$
+    "remote" PP.<+> pPrint _remoteStatus
 
 -- | Connections start out choked and not interested.
 instance Default ConnectionStatus where
@@ -646,7 +646,7 @@ data Connection s = Connection
   }
 
 instance Pretty (Connection s) where
-  pretty Connection {..} = "Connection"
+  pPrint Connection {..} = "Connection"
 
 instance ToLogStr (Connection s) where
   toLogStr Connection {..} = mconcat
@@ -724,7 +724,7 @@ establishedStats HandshakePair {..} = ConnectionStats
 -----------------------------------------------------------------------}
 
 -- | do not expose this so we can change it without breaking api
-newtype Connected s a = Connected { runConnected :: (ReaderT (Connection s) IO a) }
+newtype Connected s a = Connected { runConnected :: ReaderT (Connection s) IO a }
     deriving (Functor, Applicative, Monad
              , MonadIO, MonadReader (Connection s), MonadThrow
              )
@@ -914,7 +914,7 @@ pendingHandshake PendingConnection {..} = Handshake
 newPendingConnection :: Socket -> PeerAddr IP -> IO PendingConnection
 newPendingConnection sock addr = do
   Handshake {..} <- recvHandshake sock
-  unless (hsProtocol == def) $ do
+  unless (hsProtocol == def) $
     throwIO $ ProtocolError $ InvalidProtocol hsProtocol
   return PendingConnection
     { pendingSock  = sock
@@ -926,7 +926,7 @@ newPendingConnection sock addr = do
 -- | Release all resources associated with the given connection. Note
 -- that you /must not/ 'closePending' if you 'acceptWire'.
 closePending :: PendingConnection -> IO ()
-closePending PendingConnection {..} = do
+closePending PendingConnection {..} =
   close pendingSock
 
 {-----------------------------------------------------------------------
@@ -970,7 +970,7 @@ afterHandshaking initiator addr sock
                 else wire
 
     bracket (forkIO (chanToSock kaInterval chan sock))
-            (killThread)
+            killThread
             (\ _ -> runWire wire' sock chan conn)
 
 -- | Initiate 'Wire' connection and handshake with a peer. This function will
@@ -996,9 +996,9 @@ connectWire addr cfg = do
 --   This function can throw 'WireFailure' exception.
 --
 acceptWire :: PendingConnection -> ConnectionConfig s -> IO ()
-acceptWire pc @ PendingConnection {..} cfg = do
+acceptWire pc @ PendingConnection {..} cfg =
   bracket (return pendingSock) close $ \ _ -> do
-    unless (linkTopic (cfgSession cfg) == pendingTopic) $ do
+    unless (linkTopic (cfgSession cfg) == pendingTopic) $
       throwIO (ProtocolError (UnexpectedTopic pendingTopic))
 
     let hs = configHandshake cfg

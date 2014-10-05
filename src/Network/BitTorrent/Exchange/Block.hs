@@ -9,10 +9,8 @@
 --
 {-# LANGUAGE BangPatterns               #-}
 {-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Network.BitTorrent.Exchange.Block
        ( -- * Block attributes
          BlockOffset
@@ -67,7 +65,7 @@ import Data.Serialize as S
 import Data.Typeable
 import Numeric
 import Text.PrettyPrint as PP hiding ((<>))
-import Text.PrettyPrint.Class
+import Text.PrettyPrint.HughesPJClass hiding ((<>))
 
 import Data.Torrent
 
@@ -138,7 +136,7 @@ instance Serialize BlockIx where
   {-# INLINE put #-}
 
 instance Pretty BlockIx where
-  pretty BlockIx {..} =
+  pPrint BlockIx {..} =
     ("piece  = " <> int ixPiece  <> ",") <+>
     ("offset = " <> int ixOffset <> ",") <+>
     ("length = " <> int ixLength)
@@ -169,8 +167,8 @@ data Block payload = Block {
 
 -- | Payload is ommitted.
 instance Pretty (Block BL.ByteString) where
-  pretty = pretty . blockIx
-  {-# INLINE pretty #-}
+  pPrint = pPrint . blockIx
+  {-# INLINE pPrint #-}
 
 -- | Get size of block /payload/ in bytes.
 blockSize :: Block BL.ByteString -> BlockSize
@@ -241,8 +239,8 @@ valid = check Nothing
       check (Just False) xs
 
 instance Pretty Bucket where
-  pretty Nil = nilInvFailed
-  pretty bkt = go bkt
+  pPrint Nil = nilInvFailed
+  pPrint bkt = go bkt
     where
       go  Nil           = PP.empty
       go (Span sz   xs) = "Span" <+> PP.int sz <+> go xs
@@ -325,7 +323,7 @@ insertSpan !pos !bs !span_sz !xs =
       suff_len = (span_sz - pos) - fill_len
   in mkSpan pref_len $
      fill   fill_len (byteString (BS.take fill_len bs)) $
-     mkSpan suff_len $
+     mkSpan suff_len
      xs
   where
     mkSpan 0  xs = xs

@@ -71,7 +71,7 @@ import Data.Time.Clock.POSIX
 import Data.Word
 import GHC.Generics
 import Text.PrettyPrint as PP hiding ((<>))
-import Text.PrettyPrint.Class
+import Text.PrettyPrint.HughesPJClass hiding ((<>))
 
 import Data.Torrent
 import Network.BitTorrent.Address
@@ -117,9 +117,9 @@ instance Monad (Routing ip) where
 
   Full         >>= _ = Full
   Done       r >>= m = m r
-  GetTime    f >>= m = GetTime     $ \ t -> f t >>= m
-  NeedPing a f >>= m = NeedPing a  $ \ p -> f p >>= m
-  Refresh  n f >>= m = Refresh  n  $ \ i -> f i >>= m
+  GetTime    f >>= m = GetTime     $ f >=> m
+  NeedPing a f >>= m = NeedPing a  $ f >=> m
+  Refresh  n f >>= m = Refresh  n  $ f >=> m
 
 instance Applicative (Routing ip) where
   pure  = return
@@ -143,7 +143,7 @@ runRouting :: (Monad m, Eq ip)
            -> m (Maybe f)                      -- ^ operation result;
 runRouting ping_node find_nodes timestamper = go
   where
-    go  Full             = return (Nothing)
+    go  Full             = return Nothing
     go (Done          r) = return (Just  r)
     go (GetTime       f) = do
       t <- timestamper
@@ -232,7 +232,7 @@ insertBucket :: Eq ip => Timestamp -> NodeInfo ip -> Bucket ip
            -> ip `Routing` Bucket ip
 insertBucket curTime info bucket
   -- just update timestamp if a node is already in bucket
-  | Just _ <- PSQ.lookup info bucket = do
+  | Just _ <- PSQ.lookup info bucket =
     return $ PSQ.insertWith max info curTime bucket
 
   --  Buckets that have not been changed in 15 minutes should be "refreshed."
@@ -248,7 +248,7 @@ insertBucket curTime info bucket
   -- pinged. If any nodes in the bucket are known to have become bad,
   -- then one is replaced by the new node in the next insertBucket
   -- iteration.
-  | Just ((old @ NodeInfo {..} :-> leastSeen), rest) <- leastRecently bucket
+  | Just (old @ NodeInfo {..} :-> leastSeen, rest) <- leastRecently bucket
   , curTime - leastSeen > delta = do
     pong     <- needPing nodeAddr
     pongTime <- getTime
@@ -256,7 +256,7 @@ insertBucket curTime info bucket
     insertBucket pongTime info newBucket
 
   -- bucket is good, but not full => we can insert a new node
-  | PSQ.size bucket < defaultBucketSize = do
+  | PSQ.size bucket < defaultBucketSize =
     return $ PSQ.insert info curTime bucket
 
   -- When the bucket is full of good nodes, the new node is simply discarded.
@@ -325,7 +325,7 @@ instance (Eq ip, Serialize ip) => Serialize (Table ip)
 
 -- | Shape of the table.
 instance Pretty (Table ip) where
-  pretty t
+  pPrint t
     | bucketCount < 6 = hcat $ punctuate ", " $ L.map PP.int ss
     |    otherwise    = brackets $
       PP.int (L.sum    ss) <> " nodes, " <>
@@ -420,8 +420,8 @@ kclosest k (toNodeId -> nid)
 
 splitTip :: Eq ip => NodeId -> BucketCount -> BitIx -> Bucket ip -> Table ip
 splitTip nid n i bucket
-  | testIdBit nid i = (One  zeros (Tip nid (pred n) ones))
-  |    otherwise    = (Zero (Tip nid (pred n) zeros) ones)
+  | testIdBit nid i = One  zeros (Tip nid (pred n) ones)
+  |    otherwise    = Zero (Tip nid (pred n) zeros) ones
   where
     (zeros, ones) = split i bucket
 

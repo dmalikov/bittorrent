@@ -90,7 +90,7 @@ import Network (PortNumber)
 import System.Log.FastLogger
 import System.Random (randomIO)
 import Text.PrettyPrint as PP hiding ((<>), ($$))
-import Text.PrettyPrint.Class
+import Text.PrettyPrint.HughesPJClass hiding ((<>), ($$))
 
 import Data.Torrent as Torrent
 import Network.KRPC hiding (Options, def)
@@ -340,7 +340,7 @@ routing = runRouting probeNode refreshNodes getTimestamp
 
 probeNode :: Address ip => NodeAddr ip -> DHT ip Bool
 probeNode addr = do
-  $(logDebugS) "routing.questionable_node" (T.pack (render (pretty addr)))
+  $(logDebugS) "routing.questionable_node" (T.pack (render (pPrint addr)))
   result <- try $ Ping <@> addr
   let _ = result :: Either SomeException Ping
   return $ either (const False) (const True) result
@@ -351,7 +351,7 @@ probeNode addr = do
 -- FIXME do not use getClosest sinse we should /refresh/ them
 refreshNodes :: Address ip => NodeId -> DHT ip [NodeInfo ip]
 refreshNodes nid = do
-  $(logDebugS) "routing.refresh_bucket" (T.pack (render (pretty nid)))
+  $(logDebugS) "routing.refresh_bucket" (T.pack (render (pPrint nid)))
   nodes <- getClosest nid
   nss <- forM (nodeAddr <$> nodes) $ \ addr -> do
     NodeFound ns <- FindNode nid <@> addr
@@ -360,8 +360,8 @@ refreshNodes nid = do
 
 getTimestamp :: DHT ip Timestamp
 getTimestamp = do
-  utcTime <- liftIO $ getCurrentTime
-  $(logDebugS) "routing.make_timestamp" (T.pack (render (pretty utcTime)))
+  utcTime <- liftIO getCurrentTime
+  $(logDebugS) "routing.make_timestamp" (T.pack (render (pPrint utcTime)))
   return $ utcTimeToPOSIXSeconds utcTime
 
 {-----------------------------------------------------------------------
@@ -419,11 +419,11 @@ insertNode info = fork $ do
     case result of
       Nothing -> do
         $(logDebugS) "insertNode" $ "Routing table is full: "
-                   <> T.pack (show (pretty t))
+                   <> T.pack (show (pPrint t))
         return t
       Just t' -> do
         let logMsg = "Routing table updated: "
-                  <> pretty t <> " -> " <> pretty t'
+                  <> pPrint t <> " -> " <> pPrint t'
         $(logDebugS) "insertNode" (T.pack (render logMsg))
         return t'
 

@@ -28,8 +28,8 @@ import System.Exit
 import System.FilePath
 import System.Log
 import System.Log.Logger
+import Text.PrettyPrint.HughesPJClass
 import Text.Read
-import Text.PrettyPrint.Class
 
 import Paths_bittorrent (version)
 import Data.Torrent hiding (Magnet (Magnet))
@@ -72,7 +72,7 @@ askMaybe q = question q (Just False) >> getReply
   where
     getReply = do
       resp <- P.getLine
-      if resp == []
+      if null resp
         then return Nothing
         else maybe getReply return $ readMaybe resp
 
@@ -105,7 +105,7 @@ askInRange a b = do
 
 askChoice :: [(Text, a)] -> IO a
 askChoice kvs = do
-  forM_ (L.zip [1 :: Int ..] $ L.map fst kvs) $ \(i, lbl) -> do
+  forM_ (L.zip [1 :: Int ..] $ L.map fst kvs) $ \(i, lbl) ->
     T.putStrLn $ "  " <> T.pack (show i) <> ") " <> lbl
   T.putStrLn "Your choice?"
   n <- askInRange 1 (succ (L.length kvs))
@@ -308,7 +308,7 @@ showInfo = info (helper <*> parser) modifier
 showTorrent :: ShowOpts -> Torrent -> ShowS
 showTorrent ShowOpts {..} torrent
   | infoHashOnly = shows $ idInfoHash (tInfoDict torrent)
-  |   otherwise  = shows $ pretty torrent
+  |   otherwise  = shows $ pPrint torrent
 
 putTorrent :: ShowOpts -> IO ()
 putTorrent opts @ ShowOpts {..} = do
@@ -447,7 +447,7 @@ versioner prog ver = nullOption $ mconcat
     , value id
     , metavar ""
     , hidden
-    , reader $ const $ undefined -- Left $ ErrorMsg versionStr
+    , reader $ const undefined -- Left $ ErrorMsg versionStr
     ]
   where
     versionStr = prog ++ " version " ++ showVersion ver
@@ -473,7 +473,7 @@ run (Magnet opts) = magnet opts
 run (Show   opts) = putTorrent opts
 
 prepare :: GlobalOpts -> IO ()
-prepare GlobalOpts {..} = do
+prepare GlobalOpts {..} =
   updateGlobalLogger rootLoggerName (setLevel verbosity)
 
 main :: IO ()

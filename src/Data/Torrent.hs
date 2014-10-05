@@ -183,7 +183,7 @@ import Network.HTTP.Types.URI
 import Network.URI
 import Text.ParserCombinators.ReadP as P
 import Text.PrettyPrint as PP
-import Text.PrettyPrint.Class
+import Text.PrettyPrint.HughesPJClass
 import System.FilePath
 import System.Posix.Types
 
@@ -247,7 +247,7 @@ instance Show InfoHash where
 
 -- | Convert to base16 encoded Doc string.
 instance Pretty InfoHash where
-  pretty = text . show
+  pPrint = text . show
 
 -- | Read base16 encoded string.
 instance Read InfoHash where
@@ -256,7 +256,7 @@ instance Read InfoHash where
       return $ InfoHash $ decodeIH str
     where
       decodeIH       = BS.pack . L.map fromHex . pair
-      fromHex (a, b) = read $ '0' : 'x' : a : b : []
+      fromHex (a, b) = read ['0', 'x', a, b]
 
       pair (a : b : xs) = (a, b) : pair xs
       pair _            = []
@@ -368,7 +368,7 @@ instance BEncode (FileInfo [BS.ByteString]) where
     .: endDict
   {-# INLINE toBEncode #-}
 
-  fromBEncode = fromDict $ do
+  fromBEncode = fromDict $
     FileInfo <$>! "length"
              <*>? "md5sum"
              <*>! "path"
@@ -384,7 +384,7 @@ putFileInfoSingle FileInfo {..} cont =
     .: cont
 
 getFileInfoSingle :: BE.Get (FileInfo BS.ByteString)
-getFileInfoSingle = do
+getFileInfoSingle =
     FileInfo <$>! "length"
              <*>? "md5sum"
              <*>! "name"
@@ -397,7 +397,7 @@ instance BEncode (FileInfo BS.ByteString) where
   {-# INLINE fromBEncode #-}
 
 instance Pretty (FileInfo BS.ByteString) where
-  pretty FileInfo {..} =
+  pPrint FileInfo {..} =
        "Path: " <> text (T.unpack (T.decodeUtf8 fiName))
     $$ "Size: " <> text (show fiLength)
     $$ maybe PP.empty ppMD5 fiMD5Sum
@@ -465,8 +465,8 @@ instance BEncode LayoutInfo where
   fromBEncode = fromDict getLayoutInfo
 
 instance Pretty LayoutInfo where
-  pretty SingleFile {..} = pretty liFile
-  pretty MultiFile  {..} = vcat $ L.map (pretty . joinFilePath) liFiles
+  pPrint SingleFile {..} = pPrint liFile
+  pPrint MultiFile  {..} = vcat $ L.map (pPrint . joinFilePath) liFiles
 
 -- | Test if this is single file torrent.
 isSingleFile :: LayoutInfo -> Bool
@@ -616,7 +616,7 @@ instance NFData (Piece a)
 
 -- | Payload bytes are omitted.
 instance Pretty (Piece a) where
-  pretty Piece {..} = "Piece" <+> braces ("index" <+> "=" <+> int pieceIndex)
+  pPrint Piece {..} = "Piece" <+> braces ("index" <+> "=" <+> int pieceIndex)
 
 -- | Get size of piece in bytes.
 pieceSize :: Piece BL.ByteString -> PieceSize
@@ -675,7 +675,7 @@ putPieceInfo PieceInfo {..} cont =
     .: cont
 
 getPieceInfo :: BE.Get PieceInfo
-getPieceInfo = do
+getPieceInfo =
     PieceInfo <$>! "piece length"
               <*>! "pieces"
 
@@ -685,7 +685,7 @@ instance BEncode PieceInfo where
 
 -- | Hashes are omitted.
 instance Pretty PieceInfo where
-  pretty  PieceInfo {..} = "Piece size: " <> int piPieceLength
+  pPrint  PieceInfo {..} = "Piece size: " <> int piPieceLength
 
 slice :: Int -> Int -> BS.ByteString -> BS.ByteString
 slice start len = BS.take len . BS.drop start
@@ -780,10 +780,10 @@ instance BEncode InfoDict where
   toBEncode InfoDict {..} = toDict $
       putLayoutInfo idLayoutInfo   $
       putPieceInfo  idPieceInfo    $
-      putPrivate    idPrivate      $
+      putPrivate    idPrivate
       endDict
 
-  fromBEncode dict = (`fromDict` dict) $ do
+  fromBEncode dict = (`fromDict` dict) $
       InfoDict ih <$> getLayoutInfo
                   <*> getPieceInfo
                   <*> getPrivate
@@ -797,9 +797,9 @@ ppPrivacy privacy = "Privacy: " <> if privacy then "private" else "public"
 --ppAdditionalInfo layout = PP.empty
 
 instance Pretty InfoDict where
-  pretty InfoDict {..} =
-    pretty idLayoutInfo $$
-    pretty  idPieceInfo  $$
+  pPrint InfoDict {..} =
+    pPrint idLayoutInfo $$
+    pPrint  idPieceInfo  $$
     ppPrivacy    idPrivate
 
 {-----------------------------------------------------------------------
@@ -887,7 +887,7 @@ instance BEncode URI where
 instance BEncode POSIXTime where
   toBEncode pt = toBEncode (floor pt :: Integer)
   fromBEncode (BInteger i) = return $ fromIntegral i
-  fromBEncode _            = decodingError $ "POSIXTime"
+  fromBEncode _            = decodingError "POSIXTime"
 
 -- TODO to bencoding package
 instance BEncode String where
@@ -909,7 +909,7 @@ instance BEncode Torrent where
     .: "signature"     .=? tSignature
     .: endDict
 
-  fromBEncode = fromDict $ do
+  fromBEncode = fromDict $
     Torrent <$>? "announce"
             <*>? "announce-list"
             <*>? "comment"
@@ -930,15 +930,15 @@ _    <:>?  Nothing = PP.empty
 name <:>? (Just d) = name <:> d
 
 instance Pretty Torrent where
-  pretty Torrent {..} =
-       "InfoHash: " <> pretty (idInfoHash tInfoDict)
+  pPrint Torrent {..} =
+       "InfoHash: " <> pPrint (idInfoHash tInfoDict)
     $$ hang "General" 4 generalInfo
     $$ hang "Tracker" 4 trackers
-    $$ pretty tInfoDict
+    $$ pPrint tInfoDict
    where
     trackers = case tAnnounceList of
         Nothing  -> text (show tAnnounce)
-        Just xxs -> vcat $ L.map ppTier $ L.zip [1..] xxs
+        Just xxs -> vcat $ L.zipWith (curry ppTier) [1..] xxs
       where
         ppTier (n, xs) = "Tier #" <> int n <:> vcat (L.map (text . show) xs)
 
@@ -1037,7 +1037,7 @@ renderURN URN {..}
   = T.intercalate ":" $ "urn" : urnNamespace ++ [urnString]
 
 instance Pretty URN where
-  pretty = text . T.unpack . renderURN
+  pPrint = text . T.unpack . renderURN
 
 instance Show URN where
   showsPrec n = showsPrec n . T.unpack . renderURN
@@ -1260,7 +1260,7 @@ renderMagnetStr :: Magnet -> String
 renderMagnetStr = show . (convert :: Magnet -> URI)
 
 instance Pretty Magnet where
-  pretty = PP.text . renderMagnetStr
+  pPrint = PP.text . renderMagnetStr
 
 instance Show Magnet where
   show = renderMagnetStr

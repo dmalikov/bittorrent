@@ -36,8 +36,8 @@ module Network.BitTorrent.Internal.Progress
 
 import Control.Applicative
 import Control.Lens hiding ((%=))
-import Data.ByteString.Lazy.Builder  as BS
-import Data.ByteString.Lazy.Builder.ASCII as BS
+import Data.ByteString.Lazy.Builder as BS
+import Data.ByteString.Lazy.Builder.ASCII()
 import Data.Default
 import Data.Monoid
 import Data.Serialize as S
@@ -45,7 +45,7 @@ import Data.Ratio
 import Data.Word
 import Network.HTTP.Types.QueryLike
 import Text.PrettyPrint as PP
-import Text.PrettyPrint.Class
+import Text.PrettyPrint.HughesPJClass
 
 
 -- | Progress data is considered as dynamic within one client
@@ -104,7 +104,7 @@ instance QueryLike Progress where
     ]
 
 instance Pretty Progress where
-  pretty Progress {..} =
+  pPrint Progress {..} =
     "/\\"  <+> PP.text (show _uploaded)   $$
     "\\/"  <+> PP.text (show _downloaded) $$
     "left" <+> PP.text (show _left)

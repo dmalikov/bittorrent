@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE DeriveDataTypeable   #-}
 module Network.BitTorrent.Exchange.Session
        ( -- * Session
@@ -43,7 +42,7 @@ import Data.Set  as S
 import Data.Text as T
 import Data.Typeable
 import Text.PrettyPrint hiding ((<>))
-import Text.PrettyPrint.Class
+import Text.PrettyPrint.HughesPJClass hiding ((<>))
 import System.Log.FastLogger (LogStr, ToLogStr (..))
 
 import Data.BEncode as BE
@@ -102,7 +101,7 @@ data SessionState
     }
 
 newSessionState :: FilePath -> Either InfoHash InfoDict -> IO SessionState
-newSessionState rootPath (Left  ih  ) = do
+newSessionState rootPath (Left  ih  ) =
   WaitingMetadata <$> newMVar def <*> newEmptyMVar <*> pure rootPath
 newSessionState rootPath (Right dict) = do
   storage     <- openInfoDict ReadWriteEx rootPath dict
@@ -222,11 +221,11 @@ instance MonadLogger (Connected Session) where
     conn <- ask
     ses  <- asks connSession
     addr <- asks connRemoteAddr
-    let addrSrc = src <> " @ " <> T.pack (render (pretty addr))
+    let addrSrc = src <> " @ " <> T.pack (render (pPrint addr))
     liftIO $ sessionLogger ses loc addrSrc lvl (toLogStr msg)
 
 logMessage :: MonadLogger m => Message -> m ()
-logMessage msg = logDebugN $ T.pack (render (pretty msg))
+logMessage msg = logDebugN $ T.pack (render (pPrint msg))
 
 logEvent   :: MonadLogger m => Text    -> m ()
 logEvent       = logInfoN
@@ -274,7 +273,7 @@ finishedConnection :: Connected Session ()
 finishedConnection = do
   Session {..} <- asks connSession
   addr         <- asks connRemoteAddr
-  liftIO $ atomically $ do
+  liftIO $ atomically $
     modifyTVar connectionsEstablished $ M.delete addr
 
 -- | There are no state for this connection, remove it from the all
@@ -363,7 +362,7 @@ tryReadMVar m = do
 
 readBlock :: BlockIx -> Storage -> IO (Block BL.ByteString)
 readBlock bix @ BlockIx {..} s = do
-  p <- packException (InvalidRequest bix) $ do readPiece ixPiece s
+  p <- packException (InvalidRequest bix) $ readPiece ixPiece s
   let chunk = BL.take (fromIntegral ixLength) $
               BL.drop (fromIntegral ixOffset) (pieceData p)
   if BL.length chunk == fromIntegral ixLength
@@ -428,8 +427,7 @@ fillRequestQueue = do
 tryFillRequestQueue :: Trigger
 tryFillRequestQueue = do
   allowed <- canDownload <$> use connStatus
-  when allowed $ do
-    fillRequestQueue
+  when allowed fillRequestQueue
 
 {-----------------------------------------------------------------------
 --  Incoming message handling
@@ -486,13 +484,13 @@ handleTransfer (Message.Piece   blk) = do
       isSuccess <- undefined -- withStatusUpdates (SS.pushBlock blk storage)
       case isSuccess of
         Nothing -> liftIO $ throwIO $ userError "block is not requested"
-        Just isCompleted -> do
+        Just isCompleted ->
           when isCompleted $ do
             sendBroadcast (Have (blkPiece blk))
 --            maybe send not interested
             tryFillRequestQueue
 
-handleTransfer (Cancel  bix) = filterQueue (not . (transferResponse bix))
+handleTransfer (Cancel  bix) = filterQueue (not . transferResponse bix)
   where
     transferResponse bix (Transfer (Message.Piece blk)) = blockIx blk == bix
     transferResponse _    _                             = False
@@ -514,7 +512,7 @@ waitForMetadata = do
 
 tryRequestMetadataBlock :: Trigger
 tryRequestMetadataBlock = do
-  mpix <- lift $ undefined --withMetadataUpdates Metadata.scheduleBlock
+  mpix <- lift undefined --withMetadataUpdates Metadata.scheduleBlock
   case mpix of
     Nothing  -> error "tryRequestMetadataBlock"
     Just pix -> sendMessage (MetadataRequest pix)
@@ -528,17 +526,17 @@ handleMetadata (MetadataRequest pix) =
 
 handleMetadata (MetadataData   {..}) = do
   ih    <- asks connTopic
-  mdict <- lift $ undefined --withMetadataUpdates (Metadata.pushBlock piece ih)
+  mdict <- lift undefined --withMetadataUpdates (Metadata.pushBlock piece ih)
   case mdict of
     Nothing   -> tryRequestMetadataBlock -- not completed, need all blocks
     Just dict -> do   -- complete, wake up payload fetch
       Session {..} <- asks connSession
       liftIO $ modifyMVar_ sessionState (haveMetadata dict)
 
-handleMetadata (MetadataReject  pix) = do
-  lift $ undefined -- withMetadataUpdates (Metadata.cancelPending pix)
+handleMetadata (MetadataReject  pix) =
+  lift undefined -- withMetadataUpdates (Metadata.cancelPending pix)
 
-handleMetadata (MetadataUnknown _  ) = do
+handleMetadata (MetadataUnknown _  ) =
   logInfoN "Unknown metadata message"
 
 {-----------------------------------------------------------------------

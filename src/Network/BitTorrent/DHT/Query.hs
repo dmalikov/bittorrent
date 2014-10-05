@@ -52,8 +52,7 @@ import Data.List as L
 import Data.Monoid
 import Data.Text as T
 import Network
-import Text.PrettyPrint as PP hiding ((<>), ($$))
-import Text.PrettyPrint.Class
+import Text.PrettyPrint.HughesPJClass hiding ((<>), ($$))
 
 import Network.KRPC hiding (Options, def)
 import Data.Torrent
@@ -68,7 +67,7 @@ import Network.BitTorrent.DHT.Session
 
 nodeHandler :: Address ip => KRPC (Query a) (Response b)
            => (NodeAddr ip -> a -> DHT ip b) -> NodeHandler ip
-nodeHandler action = handler $ \ sockAddr (Query remoteId q) -> do
+nodeHandler action = handler $ \ sockAddr (Query remoteId q) ->
   case fromSockAddr sockAddr of
     Nothing    -> throwIO BadAddress
     Just naddr -> do
@@ -77,24 +76,24 @@ nodeHandler action = handler $ \ sockAddr (Query remoteId q) -> do
 
 -- | Default 'Ping' handler.
 pingH :: Address ip => NodeHandler ip
-pingH = nodeHandler $ \ _ Ping -> do
+pingH = nodeHandler $ \ _ Ping ->
   return Ping
 
 -- | Default 'FindNode' handler.
 findNodeH :: Address ip => NodeHandler ip
-findNodeH = nodeHandler $ \ _ (FindNode nid) -> do
+findNodeH = nodeHandler $ \ _ (FindNode nid) ->
   NodeFound <$> getClosest nid
 
 -- | Default 'GetPeers' handler.
 getPeersH :: Address ip => NodeHandler ip
-getPeersH = nodeHandler $ \ naddr (GetPeers ih) -> do
+getPeersH = nodeHandler $ \ naddr (GetPeers ih) ->
   GotPeers <$> getPeerList ih <*> grantToken naddr
 
 -- | Default 'Announce' handler.
 announceH :: Address ip => NodeHandler ip
 announceH = nodeHandler $ \ naddr @ NodeAddr {..} (Announce {..}) -> do
   valid <- checkToken naddr sessionToken
-  unless valid $ do
+  unless valid $
     throwIO $ InvalidParameter "token"
 
   let annPort  = if impliedPort then nodePort else port
@@ -132,7 +131,7 @@ getPeersQ topic NodeInfo {..} = do
   GotPeers {..} <- GetPeers topic <@> nodeAddr
   let dist = distance (toNodeId topic) nodeId
   $(logInfoS) "getPeersQ" $ T.pack
-         $ "distance: " <> render (pretty dist) <> " , result: "
+         $ "distance: " <> render (pPrint dist) <> " , result: "
         <> case peers of { Left _ -> "NODES"; Right _ -> "PEERS" }
   return peers
 
@@ -155,7 +154,7 @@ type Search    ip o = Conduit [NodeInfo ip] (DHT ip) [o ip]
 
 -- TODO: use reorder and filter (Traversal option) leftovers
 search :: TableKey k => Address ip => k -> Iteration ip o -> Search ip o
-search k action = do
+search k action =
   awaitForever $ \ batch -> unless (L.null batch) $ do
     $(logWarnS) "search" "start query"
     responses <- lift $ queryParallel (action <$> batch)
